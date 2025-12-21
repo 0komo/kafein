@@ -1,0 +1,3 @@
+[[language]]
+name = "erlang"
+formatter = { command = "erlfmt", args = ["-"] }

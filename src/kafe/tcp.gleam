@@ -1,16 +1,31 @@
 import gleam/dynamic.{type Dynamic}
+import gleam/option.{type Option, None, Some}
 import mug.{type Socket}
 
-pub type SecureSocket
+pub type SslSocket
 
-pub type Protocol {
+pub type ProtocolVersion {
   Tlsv1
   Tlsv1m1
   Tlsv1m2
   Tlsv1m3
 }
 
-pub type SslOptions
+pub type VerifyType {
+  VerifyNone
+  VerifyPeer
+}
+
+pub type SslOptions {
+  SslOptions(
+    protocol_versions: List(ProtocolVersion),
+    alpn: List(String),
+    cafile: Option(String),
+    cipher_suites: List(String),
+    depth: Int,
+    verify: VerifyType,
+  )
+}
 
 pub type TlsAlert {
   CloseNotify(description: String)
@@ -49,11 +64,22 @@ pub type WrapError {
   Options(Dynamic)
   TlsAlert(TlsAlert)
   Other(Dynamic)
-  ChiperSuiteNotRecognized(String)
+  ChiperSuiteNotRecognized(name: String)
+}
+
+pub fn default_options() -> SslOptions {
+  SslOptions(
+    protocol_versions: [Tlsv1m2, Tlsv1m3],
+    alpn: [],
+    cafile: None,
+    cipher_suites: [],
+    depth: 100,
+    verify: VerifyNone,
+  )
 }
 
 @external(erlang, "kafe_ffi", "wrap")
 pub fn wrap(
   socket: Socket,
   options opts: SslOptions,
-) -> Result(SecureSocket, WrapError)
+) -> Result(SslSocket, WrapError)

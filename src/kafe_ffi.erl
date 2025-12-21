@@ -7,68 +7,78 @@
 
 -type protocol_version() :: tlsv1 | tlsv1m1 | tlsv1m2 | tlsv1m3.
 
--type verify() :: none | peer.
-
--type wrap_options() :: {wrap_options,
-        ProtocolVersion :: protocol_version(),
+%% erlfmt:ignore
+-type ssl_options() ::
+    {ssl_options,
+        ProtocolVersions :: [protocol_version()],
         Alpn :: [binary()],
         Cafile :: option(binary()),
         ChiperSuites :: [binary()],
         Depth :: pos_integer(),
-        Verify :: verify()    
-    }.
+        Verify :: verify_none | verify_peer}.
 
--spec wrap(inet:socket(), wrap_options()) -> result(ssl:sslsocket(), any()).
-wrap(Socket, {wrap_options, ProtocolVersion, Alpn, Cafile, ChiperSuiteNames, Depth, Verify}) ->
-    maybe
+-type wrap_error() ::
+    closed | {options, any()} | ssl:error_alert() | ssl:reason() | {cipher_suite_not_recognized, string()}.
+
+-spec wrap(inet:socket(), ssl_options()) -> result(ssl:sslsocket(), wrap_error()).
+wrap(Socket, {ssl_options, ProtocolVersions, Alpn, Cafile, ChiperSuiteNames, Depth, Verify}) ->
+    Res = maybe
         {ok, Ciphers} ?= strs_to_suites(ChiperSuiteNames),
-        % eqwalizer:ignore not sure why it yells here
-        ssl:connect(Socket, lists:append([
-            [
-                {versions, [normalise(ProtocolVersion)]},
-                {alpn_advertised_protocols, Alpn},
-                {cacerts, public_key:cacerts_get()},
-                {ciphers, Ciphers},
-                {depth, Depth},
-                {verify, normalise(Verify)}
-            ],
-            % eqwalizer:ignore unwrap_option will always unwrap cuz of is_some
-            optional(is_some(Cafile), {cacertfile, unicode:characters_to_list(unwrap_option(Cafile))})
-        ]))
-    end.
+        ssl:connect(
+            Socket,
+            %% eqwalizer:ignore not sure why it yells here
+            lists:append([
+                [
+                    {versions, lists:map(fun normalise/1, ProtocolVersions)},
+                    {alpn_advertised_protocols, Alpn},
+                    {cacerts, public_key:cacerts_get()},
+                    {ciphers, Ciphers},
+                    {depth, Depth},
+                    {verify, Verify}
+                ],
+                optional(
+                    is_some(Cafile),
+                    %% eqwalizer:ignore unwrap_option will always unwrap cuz of is_some
+                    fun() -> {cacertfile, unicode:characters_to_list(unwrap_option(Cafile))} end
+                )
+            ])
+        )
+    end,
+    normalise(Res).
 
-
--spec normalise(tlsv1) -> tlsv1;
-               (tlsv1m1) -> 'tlsv1.1';
-               (tlsv1m2) -> 'tlsv1.2';
-               (tlsv1m3) -> 'tlsv1.3';
-               (none) -> verify_none;
-               (peer) -> verify_peer.
+-spec normalise
+    (tlsv1 | tlsv1m1 | tlsv1m2 | tlsv1m3) -> ssl:protocol_version();
+    (result(V, E)) -> result(V, E);
+    ({error, {not_recognized, string()}}) -> {error, {cipher_suite_not_recognized, string()}}.
 %% Protocol version
 normalise(tlsv1) -> tlsv1;
 normalise(tlsv1m1) -> 'tlsv1.1';
 normalise(tlsv1m2) -> 'tlsv1.2';
 normalise(tlsv1m3) -> 'tlsv1.3';
-%% Verify
-normalise(none) -> verify_none;
-normalise(peer) -> verify_peer.
+normalise({error, {not_recognized, Name}}) -> {error, {cipher_suite_not_recognized, list_to_binary(Name)}};
+normalise({error, {tls_alert, {Name, Desc}}}) -> {error, {tls_alert, {Name, list_to_binary(Desc)}}};
+normalise({ok, _} = V) -> V;
+normalise({error, _} = E) -> E.
 
--spec strs_to_suites([binary()]) -> result(ssl:ciphers(), {not_recognized, string()}).
+-spec strs_to_suites([binary()]) -> result(ssl:ciphers(), {cipher_suite_not_recognized, binary()}).
 strs_to_suites(Names) ->
-    Unchecked = lists:map(fun(V) ->
-        % eqwalizer:ignore will always return string()
-        ssl:str_to_suite(unicode:characters_to_list(V))
-    end, Names),
+    Unchecked = lists:map(
+        fun(V) ->
+            %% eqwalizer:ignore will always return string()
+            ssl:str_to_suite(unicode:characters_to_list(V))
+        end,
+        Names
+    ),
     case lists:search(fun is_error/1, Unchecked) of
-        {value, {error, _} = E} -> E;
-        % eqwalizer:ignore it's already handled by the lists:search
+        {value, {error, _} = E} -> normalise(E);
+        %% eqwalizer:ignore it's already handled by the lists:search
         false -> {ok, Unchecked}
     end.
 
--spec optional(boolean(), T) -> [T] | [].
+-spec optional(boolean(), fun(() -> T)) -> [T] | [].
 optional(Pred, V) ->
     case Pred of
-        true -> [V];
+        true -> [V()];
         false -> []
     end.
 
