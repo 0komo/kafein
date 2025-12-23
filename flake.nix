@@ -27,5 +27,12 @@
       ]);
 
       treefmtConfig = import ./treefmt.nix;
+
+      devShells.test = {
+        shellHook = ''
+          gleam test
+          exit
+        '';
+      };
     };
 }
