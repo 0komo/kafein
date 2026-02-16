@@ -123,6 +123,17 @@ pub fn upgrade_connection_test() {
   socket
 }
 
+pub fn upgrade_connection_with_sni_test() {
+  let assert Ok(socket) =
+    kafe.default_options
+    |> kafe.verify(kafe.VerifyNone)
+    |> kafe.server_name_indication("localhost")
+    |> kafe.wrap(connect())
+    as "failed to upgrade connection with server_name_indication"
+
+  socket
+}
+
 pub fn export_key_material_test() {
   let ssl_socket = upgrade_connection_test()
 

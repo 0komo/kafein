@@ -425,7 +425,7 @@ fn coerce_options(
       False -> Full
     }),
     ServerNameIndication(case options.server_name_indication {
-      Some(name) -> dynamic.string(name)
+      Some(name) -> binary_to_charlist(name)
       None -> atom.create("disable") |> atom.to_dynamic
     }),
   ]
@@ -490,6 +490,9 @@ fn decode_ssl_message(msg: Dynamic) -> SslMessage
 
 @external(erlang, "kafein_ffi", "strs_to_suites")
 fn strings_to_suites(ciphers: List(String)) -> Result(List(Dynamic), Error)
+
+@external(erlang, "erlang", "binary_to_list")
+fn binary_to_charlist(value: String) -> Dynamic
 
 @external(erlang, "kafein_ffi", "unsafe_cast")
 fn unsafe_cast(value: a) -> b

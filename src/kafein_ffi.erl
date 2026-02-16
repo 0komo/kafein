@@ -89,11 +89,13 @@ coerce_ssl_message({ssl_closed, Socket}) ->
 coerce_ssl_message({ssl_error, Socket, Error}) ->
     {ssl_error, Socket, coerce_result({error, Error})}.
 
--spec is_inet_error(atom()) -> boolean().
+-spec is_inet_error(any()) -> boolean().
 
-is_inet_error(Atom) ->
+is_inet_error(Atom) when is_atom(Atom) ->
     <<C, _/utf8>> = atom_to_binary(Atom),
-    C == ~"e" orelse C == ~"n".
+    C == ~"e" orelse C == ~"n";
+is_inet_error(_) ->
+    false.
 
 -spec strs_to_suites([binary()]) -> result(ssl:ciphers(), {cipher_suite_not_recognized, binary()}).
 
